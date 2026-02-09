@@ -9,7 +9,7 @@ import { tu2fxy, fxyEqual, rightNextPixel } from '../pixel/fxy';
 import { fxy2nest } from '../schemes/nested';
 import { nest2ring } from '../schemes/conversion';
 import { maxPixelRadius } from '../pixel/geometry';
-import { pix2LonLatNest } from '../geo/latlon';
+import { pix2LonLatNest, cornersNestLonLat } from '../geo/latlon';
 import { BBox } from '../types';
 
 /**
@@ -23,12 +23,18 @@ import { BBox } from '../types';
  * not just the center. This is achieved by expanding the search region
  * by the maximum pixel radius.
  *
- * Note: Handles longitude wrapping (e.g., bbox[0]=170, bbox[2]=-170 crosses antimeridian)
+ * Handles antimeridian crossing in two forms:
+ * - minLon > maxLon (e.g., [170, -10, -170, 10])
+ * - Longitudes outside [-180, 180] (e.g., [178, -10, 184, 10])
  *
  * @example
  * ```ts
  * // Query pixels in a box around New York City
  * const pixels = queryBoxInclusiveNest(512, [-74.3, 40.5, -73.7, 40.9]);
+ *
+ * // Antimeridian crossing (both forms equivalent)
+ * const pixels1 = queryBoxInclusiveNest(16, [178, -21, 184, -15]);
+ * const pixels2 = queryBoxInclusiveNest(16, [178, -21, -176, -15]);
  * ```
  */
 export function queryBoxInclusiveNest(nside: number, bbox: BBox): number[] {
@@ -53,56 +59,83 @@ export function queryBoxInclusiveRing(nside: number, bbox: BBox): number[] {
 }
 
 /**
+ * Normalizes a longitude to (-180, 180].
+ */
+function normalizeLon(lon: number): number {
+  while (lon > 180) lon -= 360;
+  while (lon <= -180) lon += 360;
+  return lon;
+}
+
+/**
+ * Normalizes a longitude difference to (-180, 180].
+ * Used for antimeridian-safe distance comparisons.
+ */
+function normalizeDelta(d: number): number {
+  while (d > 180) d -= 360;
+  while (d <= -180) d += 360;
+  return d;
+}
+
+/**
  * Internal implementation for both NESTED and RING box queries.
+ *
+ * Uses a reference-frame approach for longitude comparisons:
+ * all longitudes are expressed as deltas from a reference point
+ * (the bbox center), which eliminates antimeridian edge cases.
  */
 function queryBoxInclusiveImpl(
   nside: number,
   bbox: BBox,
   asRing: boolean
 ): number[] {
-  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const [rawMinLon, minLat, rawMaxLon, maxLat] = bbox;
   const results: number[] = [];
+
+  // Normalize longitudes to (-180, 180]
+  const minLon = normalizeLon(rawMinLon);
+  const maxLon = normalizeLon(rawMaxLon);
+
+  // Compute longitude span and reference point for safe comparisons.
+  // After normalization, minLon > maxLon means the box crosses the antimeridian.
+  const crossesAntimeridian = minLon > maxLon;
+  let lonSpan = crossesAntimeridian ? 360 - minLon + maxLon : maxLon - minLon;
+
+  // If normalization collapsed a wide bbox to zero span (e.g., [-180,180] both
+  // normalize to 180), treat it as full longitude coverage.
+  if (lonSpan === 0 && rawMinLon !== rawMaxLon) {
+    lonSpan = 360;
+  }
+
+  const halfLonSpan = lonSpan / 2;
+  // Reference longitude at box center (may exceed 180, that's fine for deltas)
+  const refLon = minLon + halfLonSpan;
 
   // Expand bounds by pixel radius for inclusive query
   const pixRadDeg = maxPixelRadius(nside) * (180 / PI);
   const expandedMinLat = Math.max(-90, minLat - pixRadDeg);
   const expandedMaxLat = Math.min(90, maxLat + pixRadDeg);
+  const expandedHalfLonSpan = halfLonSpan + pixRadDeg;
 
   // Convert latitude bounds to colatitude (theta)
-  // theta = 0 at north pole, theta = PI at south pole
-  const thetaMin = deg2Rad(90 - expandedMaxLat); // maxLat -> smaller theta (more north)
-  const thetaMax = deg2Rad(90 - expandedMinLat); // minLat -> larger theta (more south)
+  const thetaMin = deg2Rad(90 - expandedMaxLat);
+  const thetaMax = deg2Rad(90 - expandedMinLat);
 
-  // Calculate ring range from theta bounds
-  const d = PI_4 / nside; // Angular size per ring step
-
-  // Convert theta to ring index
-  // Ring 1 is at theta ≈ 0 (north pole), ring 4*nside-1 is at theta ≈ PI (south pole)
+  // Calculate ring range
+  const d = PI_4 / nside;
   const ringMin = Math.max(1, Math.floor(thetaMin / d));
   const ringMax = Math.min(4 * nside - 1, Math.ceil(thetaMax / d) + 1);
 
-  // Handle longitude wrapping
-  const crossesAntimeridian = minLon > maxLon;
-  const expandedMinLon = minLon - pixRadDeg;
-  const expandedMaxLon = maxLon + pixRadDeg;
-
   // Iterate through rings
   for (let ring = ringMin; ring <= ringMax; ring++) {
-    walkRingFiltered(
-      nside,
-      ring,
-      expandedMinLon,
-      expandedMaxLon,
-      crossesAntimeridian,
-      (ipixNest) => {
-        // Final check: verify pixel actually intersects the original (unexpanded) box
-        if (
-          pixelIntersectsBox(nside, ipixNest, minLon, maxLon, minLat, maxLat)
-        ) {
-          results.push(asRing ? nest2ring(nside, ipixNest) : ipixNest);
-        }
+    walkRingFiltered(nside, ring, refLon, expandedHalfLonSpan, (ipixNest) => {
+      // Final check: verify pixel corners actually intersect the original box
+      if (
+        pixelIntersectsBox(nside, ipixNest, refLon, halfLonSpan, minLat, maxLat)
+      ) {
+        results.push(asRing ? nest2ring(nside, ipixNest) : ipixNest);
       }
-    );
+    });
   }
 
   return results;
@@ -110,13 +143,16 @@ function queryBoxInclusiveImpl(
 
 /**
  * Walks pixels in a ring, filtering by longitude range.
+ *
+ * Uses the reference-frame approach: a pixel passes the filter if its
+ * center longitude is within `halfLonSpan` of `refLon` (accounting for
+ * antimeridian wrapping via normalizeDelta).
  */
 function walkRingFiltered(
   nside: number,
   ring: number,
-  minLon: number,
-  maxLon: number,
-  crossesAntimeridian: boolean,
+  refLon: number,
+  halfLonSpan: number,
   cb: (ipixNest: number) => void
 ): void {
   const u = PI_4 * (2 - ring / nside);
@@ -129,12 +165,9 @@ function walkRingFiltered(
     const ipix = fxy2nest(nside, s.f, s.x, s.y);
     const [lon] = pix2LonLatNest(nside, ipix);
 
-    // Check if pixel longitude is within range
-    const inRange = crossesAntimeridian
-      ? lon >= minLon || lon <= maxLon // Wraps around antimeridian
-      : lon >= minLon && lon <= maxLon;
-
-    if (inRange) {
+    // Check if pixel center longitude is within the expanded range
+    const delta = normalizeDelta(lon - refLon);
+    if (Math.abs(delta) <= halfLonSpan) {
       cb(ipix);
     }
 
@@ -144,47 +177,37 @@ function walkRingFiltered(
 
 /**
  * Checks if a pixel intersects a bounding box.
- * Uses pixel center and a buffer based on pixel radius.
+ *
+ * Uses actual pixel corners for precise intersection testing.
+ * Longitude overlap is tested in a reference frame centered on the
+ * bbox, making all comparisons antimeridian-safe.
  */
 function pixelIntersectsBox(
   nside: number,
   ipix: number,
-  minLon: number,
-  maxLon: number,
+  refLon: number,
+  halfLonSpan: number,
   minLat: number,
   maxLat: number
 ): boolean {
-  const [centerLon, centerLat] = pix2LonLatNest(nside, ipix);
-  const crossesAntimeridian = minLon > maxLon;
+  const corners = cornersNestLonLat(nside, ipix);
 
-  // Check if center is in box
-  const lonInRange = crossesAntimeridian
-    ? centerLon >= minLon || centerLon <= maxLon
-    : centerLon >= minLon && centerLon <= maxLon;
+  // Check latitude overlap using pixel corner extents
+  let pixMinLat = Infinity;
+  let pixMaxLat = -Infinity;
+  let pixMinDelta = Infinity;
+  let pixMaxDelta = -Infinity;
 
-  if (lonInRange && centerLat >= minLat && centerLat <= maxLat) {
-    return true;
+  for (const [lon, lat] of corners) {
+    if (lat < pixMinLat) pixMinLat = lat;
+    if (lat > pixMaxLat) pixMaxLat = lat;
+    const delta = normalizeDelta(lon - refLon);
+    if (delta < pixMinDelta) pixMinDelta = delta;
+    if (delta > pixMaxDelta) pixMaxDelta = delta;
   }
 
-  // For edge pixels, check if they might still intersect due to their size
-  const pixRadDeg = maxPixelRadius(nside) * (180 / PI);
+  if (pixMaxLat < minLat || pixMinLat > maxLat) return false;
 
-  // Latitude overlap check with buffer
-  if (centerLat + pixRadDeg < minLat || centerLat - pixRadDeg > maxLat) {
-    return false;
-  }
-
-  // Longitude overlap check with buffer
-  if (crossesAntimeridian) {
-    // Box wraps around antimeridian
-    return (
-      centerLon + pixRadDeg >= minLon ||
-      centerLon - pixRadDeg <= maxLon ||
-      centerLon + pixRadDeg >= minLon - 360 ||
-      centerLon - pixRadDeg <= maxLon + 360
-    );
-  } else {
-    // Normal box
-    return centerLon + pixRadDeg >= minLon && centerLon - pixRadDeg <= maxLon;
-  }
+  // Check longitude overlap: pixel delta range vs bbox delta range [-halfLonSpan, halfLonSpan]
+  return pixMaxDelta >= -halfLonSpan && pixMinDelta <= halfLonSpan;
 }

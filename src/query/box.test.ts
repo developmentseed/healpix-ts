@@ -73,11 +73,48 @@ describe('queryBoxInclusiveNest', () => {
     }
   });
 
-  it('handles antimeridian crossing box', () => {
-    // Box that wraps around the antimeridian
-    const bbox: BBox = [170, -10, -170, 10]; // minLon > maxLon
+  it('handles antimeridian crossing box (minLon > maxLon form)', () => {
+    const bbox: BBox = [170, -10, -170, 10];
     const pixels = queryBoxInclusiveNest(nside, bbox);
     expect(pixels.length).toBeGreaterThan(0);
+  });
+
+  it('handles antimeridian crossing box (lon > 180 form)', () => {
+    // [178, -21, 184, -15] where 184° = -176°
+    const bbox: BBox = [178, -21, 184, -15];
+    const pixels = queryBoxInclusiveNest(nside, bbox);
+    expect(pixels.length).toBeGreaterThan(0);
+
+    // Should not include pixels that don't intersect the bbox
+    const falsePositiveIds = [1592, 1587, 1575, 1572, 1550];
+    for (const id of falsePositiveIds) {
+      expect(pixels).not.toContain(id);
+    }
+  });
+
+  it('both antimeridian forms return the same pixels', () => {
+    const form1: BBox = [178, -21, 184, -15]; // lon > 180 form
+    const form2: BBox = [178, -21, -176, -15]; // minLon > maxLon form
+    const pixels1 = queryBoxInclusiveNest(nside, form1).sort();
+    const pixels2 = queryBoxInclusiveNest(nside, form2).sort();
+    expect(pixels1).toEqual(pixels2);
+  });
+
+  it('antimeridian query finds pixels on both sides of the dateline', () => {
+    const bbox: BBox = [178, -21, 184, -15];
+    const pixels = queryBoxInclusiveNest(nside, bbox);
+
+    const hasWestSide = pixels.some((ipix) => {
+      const [lon] = pix2LonLatNest(nside, ipix);
+      return lon > 170;
+    });
+    const hasEastSide = pixels.some((ipix) => {
+      const [lon] = pix2LonLatNest(nside, ipix);
+      return lon < -170;
+    });
+
+    expect(hasWestSide).toBe(true);
+    expect(hasEastSide).toBe(true);
   });
 });
 
