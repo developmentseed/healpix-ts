@@ -80,13 +80,19 @@ export function lonLat2PixRing(
  * @param ipix - Nested pixel index
  * @returns Array of 4 corners: [north, west, south, east] in [lon, lat]
  *
- * For pixels that cross the antimeridian (±180°), corner longitudes are
- * unwrapped to form a continuous polygon. This means some longitudes may
- * exceed the [-180, 180] range (e.g., 182° instead of -178°).
+ * Corner longitudes are unwrapped relative to the pixel center to form
+ * a continuous polygon. This means some longitudes may exceed the
+ * [-180, 180] range (e.g., 182° instead of -178°). Pole corners
+ * (lat ±90) use the pixel center longitude since the pole has no
+ * well-defined longitude.
  */
 export function cornersNestLonLat(nside: number, ipix: number): LonLat[] {
   const corners = cornersNest(nside, ipix);
-  return unwrapCornerLons(corners.map((v) => vec2LonLat(v)));
+  const [centerLon] = pix2LonLatNest(nside, ipix);
+  return unwrapCornerLons(
+    corners.map((v) => vec2LonLat(v)),
+    centerLon
+  );
 }
 
 /**
@@ -96,27 +102,36 @@ export function cornersNestLonLat(nside: number, ipix: number): LonLat[] {
  * @param ipix - Ring pixel index
  * @returns Array of 4 corners: [north, west, south, east] in [lon, lat]
  *
- * For pixels that cross the antimeridian (±180°), corner longitudes are
- * unwrapped to form a continuous polygon. This means some longitudes may
- * exceed the [-180, 180] range (e.g., 182° instead of -178°).
+ * Corner longitudes are unwrapped relative to the pixel center to form
+ * a continuous polygon. This means some longitudes may exceed the
+ * [-180, 180] range (e.g., 182° instead of -178°). Pole corners
+ * (lat ±90) use the pixel center longitude since the pole has no
+ * well-defined longitude.
  */
 export function cornersRingLonLat(nside: number, ipix: number): LonLat[] {
   const corners = cornersRing(nside, ipix);
-  return unwrapCornerLons(corners.map((v) => vec2LonLat(v)));
+  const [centerLon] = pix2LonLatRing(nside, ipix);
+  return unwrapCornerLons(
+    corners.map((v) => vec2LonLat(v)),
+    centerLon
+  );
 }
 
 /**
  * Unwraps corner longitudes so they form a continuous polygon.
  *
- * When a pixel straddles the antimeridian (±180°), some corners end up
- * near +180° and others near -180°, causing a ~360° longitude span.
- * This function shifts outlier longitudes so all corners are within
- * 180° of each other, keeping the polygon continuous for rendering.
+ * Uses the pixel center longitude as the reference point, which is
+ * always well-defined and inside the pixel. Each corner is shifted
+ * to be within 180° of the reference. Corners at the poles (lat ±90)
+ * have their longitude replaced with the reference since longitude
+ * is undefined at the poles.
  */
-function unwrapCornerLons(corners: LonLat[]): LonLat[] {
-  // Use the first corner as the reference longitude.
-  const refLon = corners[0][0];
+function unwrapCornerLons(corners: LonLat[], refLon: number): LonLat[] {
   return corners.map(([lon, lat]) => {
+    // At the poles, longitude is undefined; use the pixel center longitude
+    if (Math.abs(lat) >= 90 - 1e-6) {
+      lon = refLon;
+    }
     while (lon - refLon > 180) lon -= 360;
     while (lon - refLon < -180) lon += 360;
     return [lon, lat] as LonLat;
