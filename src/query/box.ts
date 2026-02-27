@@ -3,8 +3,9 @@
  * Bounding box query functions for finding pixels within a rectangular region
  */
 
-import { PI, PI_4 } from '../constants';
+import { PI, PI_2, PI_4 } from '../constants';
 import { deg2Rad } from '../utils';
+import { za2tu } from '../coordinates/projection';
 import { tu2fxy, fxyEqual, rightNextPixel } from '../pixel/fxy';
 import { fxy2nest } from '../schemes/nested';
 import { nest2ring } from '../schemes/conversion';
@@ -117,14 +118,14 @@ function queryBoxInclusiveImpl(
   const expandedMaxLat = Math.min(90, maxLat + pixRadDeg);
   const expandedHalfLonSpan = halfLonSpan + pixRadDeg;
 
-  // Convert latitude bounds to colatitude (theta)
-  const thetaMin = deg2Rad(90 - expandedMaxLat);
-  const thetaMax = deg2Rad(90 - expandedMinLat);
-
-  // Calculate ring range
+  // Compute ring range using exact HEALPix projection (handles polar caps correctly)
   const d = PI_4 / nside;
-  const ringMin = Math.max(1, Math.floor(thetaMin / d));
-  const ringMax = Math.min(4 * nside - 1, Math.ceil(thetaMax / d) + 1);
+  const zTop = Math.sin(deg2Rad(expandedMaxLat));
+  const zBot = Math.sin(deg2Rad(expandedMinLat));
+  const uTop = za2tu(zTop, 0).u;
+  const uBot = za2tu(zBot, 0).u;
+  const ringMin = Math.max(1, Math.floor((PI_2 - uTop) / d));
+  const ringMax = Math.min(4 * nside - 1, Math.floor((PI_2 - uBot) / d + 1));
 
   // Iterate through rings
   for (let ring = ringMin; ring <= ringMax; ring++) {

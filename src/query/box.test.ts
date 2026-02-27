@@ -118,6 +118,81 @@ describe('queryBoxInclusiveNest', () => {
   });
 });
 
+describe('queryBoxInclusiveNest - polar cap boundary', () => {
+  it('finds all pixels for a box crossing the north polar cap boundary (nside=64)', () => {
+    const nside = 64;
+    const bbox: BBox = [10, 36.86, 30, 42.28];
+    const pixels = queryBoxInclusiveNest(nside, bbox);
+
+    // Brute-force: check every pixel to find the true set that intersects
+    const npix = nside2npix(nside);
+    const missed: number[] = [];
+    for (let ipix = 0; ipix < npix; ipix++) {
+      const [lon, lat] = pix2LonLatNest(nside, ipix);
+      if (lon >= 10 && lon <= 30 && lat >= 36.86 && lat <= 42.28) {
+        if (!pixels.includes(ipix)) {
+          missed.push(ipix);
+        }
+      }
+    }
+    expect(missed).toEqual([]);
+  });
+
+  it('finds all pixels for a box crossing the south polar cap boundary (nside=64)', () => {
+    const nside = 64;
+    const bbox: BBox = [10, -42.28, 30, -36.86];
+    const pixels = queryBoxInclusiveNest(nside, bbox);
+
+    const npix = nside2npix(nside);
+    const missed: number[] = [];
+    for (let ipix = 0; ipix < npix; ipix++) {
+      const [lon, lat] = pix2LonLatNest(nside, ipix);
+      if (lon >= 10 && lon <= 30 && lat >= -42.28 && lat <= -36.86) {
+        if (!pixels.includes(ipix)) {
+          missed.push(ipix);
+        }
+      }
+    }
+    expect(missed).toEqual([]);
+  });
+
+  it('finds all pixels for a box fully inside the north polar cap (nside=64)', () => {
+    const nside = 64;
+    const bbox: BBox = [0, 50, 40, 70];
+    const pixels = queryBoxInclusiveNest(nside, bbox);
+
+    const npix = nside2npix(nside);
+    const missed: number[] = [];
+    for (let ipix = 0; ipix < npix; ipix++) {
+      const [lon, lat] = pix2LonLatNest(nside, ipix);
+      if (lon >= 0 && lon <= 40 && lat >= 50 && lat <= 70) {
+        if (!pixels.includes(ipix)) {
+          missed.push(ipix);
+        }
+      }
+    }
+    expect(missed).toEqual([]);
+  });
+
+  it('finds all pixels for a box spanning equatorial to polar cap (nside=32)', () => {
+    const nside = 32;
+    const bbox: BBox = [-20, 30, 20, 55];
+    const pixels = queryBoxInclusiveNest(nside, bbox);
+
+    const npix = nside2npix(nside);
+    const missed: number[] = [];
+    for (let ipix = 0; ipix < npix; ipix++) {
+      const [lon, lat] = pix2LonLatNest(nside, ipix);
+      if (lon >= -20 && lon <= 20 && lat >= 30 && lat <= 55) {
+        if (!pixels.includes(ipix)) {
+          missed.push(ipix);
+        }
+      }
+    }
+    expect(missed).toEqual([]);
+  });
+});
+
 describe('queryBoxInclusiveRing', () => {
   const nside = 16;
 
