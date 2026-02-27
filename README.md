@@ -1,8 +1,11 @@
 # HEALPix TypeScript
 
-A complete TypeScript implementation of the **HEALPix** (Hierarchical Equal Area isoLatitude Pixelization) spherical projection system.
+TypeScript implementation of the **HEALPix** (Hierarchical Equal Area isoLatitude Pixelization) spherical projection system, with functions to convert HEALPix to longitude/latitude, and vice versa.
 
-Based on [Górski et al. (2005)](http://iopscience.iop.org/article/10.1086/427976/pdf)
+Based on [Górski et al. (2005)](http://iopscience.iop.org/article/10.1086/427976/pdf). A more in depth explanation of the concepts can be found in the [CONCEPTS](docs/CONCEPTS.md) document.
+
+> [!IMPORTANT]  
+> **Attribution**: This implementation is highly based on [michitaro/healpix](https://github.com/michitaro/healpix). Code was forked, organized, documented, and new features added.
 
 ## What is HEALPix?
 
@@ -48,6 +51,8 @@ const corners = cornersNestLonLat(nside, ipix)
 console.log('Corners:', corners)
 ```
 
+See [API](docs/API.md) for more details.
+
 ## Resolution Levels
 
 | Order | Nside | Total Pixels | Pixel Size (deg²) | Approx. Resolution |
@@ -76,81 +81,6 @@ console.log('Corners:', corners)
 - Packs (order, ipix) into a single integer
 - Used for multi-resolution coverage maps (MOC)
 
-## API Reference
-
-### Resolution Functions
-
-```typescript
-order2nside(order: number): number          // order → nside
-nside2order(nside: number): number          // nside → order
-nside2npix(nside: number): number           // total pixel count
-nside2pixarea(nside: number): number        // pixel area in steradians
-nside2resol(nside: number): number          // pixel size in radians
-```
-
-### Position ↔ Pixel Index
-
-```typescript
-// Angular coordinates (theta, phi) ↔ pixel index
-ang2PixNest(nside, theta, phi): number
-ang2PixRing(nside, theta, phi): number
-pix2AngNest(nside, ipix): { theta, phi }
-pix2AngRing(nside, ipix): { theta, phi }
-
-// 3D vector ↔ pixel index
-vec2PixNest(nside, [x, y, z]): number
-vec2PixRing(nside, [x, y, z]): number
-pix2VecNest(nside, ipix): [x, y, z]
-pix2VecRing(nside, ipix): [x, y, z]
-
-// Lat/lon ↔ pixel index
-lonLat2PixNest(nside, lon, lat): number
-lonLat2PixRing(nside, lon, lat): number
-pix2LonLatNest(nside, ipix): [lon, lat]
-pix2LonLatRing(nside, ipix): [lon, lat]
-```
-
-### Scheme Conversion
-
-```typescript
-nest2ring(nside, ipix): number    // NESTED → RING
-ring2nest(nside, ipix): number    // RING → NESTED
-orderpix2uniq(order, ipix): number   // (order, ipix) → UNIQ
-uniq2orderpix(uniq): { order, ipix } // UNIQ → (order, ipix)
-```
-
-### Pixel Geometry
-
-```typescript
-cornersNest(nside, ipix): V3[]           // 4 corner vertices
-cornersRing(nside, ipix): V3[]
-cornersNestLonLat(nside, ipix): LonLat[]
-cornersRingLonLat(nside, ipix): LonLat[]
-pixcoord2VecNest(nside, ipix, ne, nw): V3  // sub-pixel position
-pixcoord2VecRing(nside, ipix, ne, nw): V3
-maxPixelRadius(nside): number              // max angular radius
-```
-
-### Hierarchical Operations
-
-```typescript
-nestParent(ipix): number                   // parent pixel
-nestChildren(ipix): [n, n, n, n]           // 4 children
-nestAncestor(ipix, levels): number         // ancestor at level
-nestDescendants(ipix, levels): number[]    // all descendants
-isNestAncestor(ancestor, ancestorNside, descendant, descendantNside): boolean
-uniqParent(uniq): number
-uniqChildren(uniq): [n, n, n, n]
-```
-
-### Spatial Queries
-
-```typescript
-queryDiscInclusiveNest(nside, center, radius, callback): void
-queryDiscInclusiveRing(nside, center, radius, callback): void
-queryBoxInclusiveNest(nside, bbox): number[]
-queryBoxInclusiveRing(nside, bbox): number[]
-```
 
 ## Coordinate Systems
 
@@ -201,7 +131,8 @@ src/
 - [HEALPix Official Website](https://healpix.sourceforge.io/)
 - [HEALPix Paper (Górski et al. 2005)](http://iopscience.iop.org/article/10.1086/427976/pdf)
 - [HEALPix Documentation](https://healpix.sourceforge.io/html/intro.htm)
+- [michitaro/healpix](https://github.com/michitaro/healpix) – Original JavaScript/TypeScript implementation
 
 ## License
 
-MIT
+MIT – see [LICENSE](LICENSE)

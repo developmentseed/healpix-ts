@@ -12,7 +12,7 @@
  * import {
  *   ang2PixNest,
  *   pix2AngNest,
- *   nest2LonLat,
+ *   pix2LonLatNest,
  *   order2nside
  * } from 'healpix'
  *
