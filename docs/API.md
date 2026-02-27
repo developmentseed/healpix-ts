@@ -226,10 +226,10 @@ Get all descendants at specific depth.
 function nestDescendants(ipix: number, levels: number): number[]
 ```
 
-### isAncestor
+### isNestAncestor
 Check if one pixel is an ancestor of another.
 ```typescript
-function isAncestor(ancestor: number, ancestorNside: number, descendant: number, descendantNside: number): boolean
+function isNestAncestor(ancestor: number, ancestorNside: number, descendant: number, descendantNside: number): boolean
 ```
 
 ### uniqParent

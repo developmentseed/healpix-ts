@@ -138,7 +138,7 @@ nestParent(ipix): number                   // parent pixel
 nestChildren(ipix): [n, n, n, n]           // 4 children
 nestAncestor(ipix, levels): number         // ancestor at level
 nestDescendants(ipix, levels): number[]    // all descendants
-isAncestor(ancestor, ancestorNside, descendant, descendantNside): boolean
+isNestAncestor(ancestor, ancestorNside, descendant, descendantNside): boolean
 uniqParent(uniq): number
 uniqChildren(uniq): [n, n, n, n]
 ```
