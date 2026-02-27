@@ -64,11 +64,37 @@ export function nest2fxy(nside: number, ipix: number): FXY {
   return { f, x, y };
 }
 
+/** Max coordinate bits (supports nside up to 2^BITS) */
+const BITS = 26;
+const MAX_COORD = (1 << BITS) - 1;
+
+/** Spreads 32-bit value: inserts 0 between each bit. */
+function spread1By1(n: bigint): bigint {
+  n = n & 0xffffffffn;
+  n = (n | (n << 16n)) & 0x0000ffff0000ffffn;
+  n = (n | (n << 8n)) & 0x00ff00ff00ff00ffn;
+  n = (n | (n << 4n)) & 0x0f0f0f0f0f0f0f0fn;
+  n = (n | (n << 2n)) & 0x3333333333333333n;
+  n = (n | (n << 1n)) & 0x5555555555555555n;
+  return n;
+}
+
+/** Compacts 64-bit value: extracts even bits. */
+function compact1By1(n: bigint): bigint {
+  n = n & 0x5555555555555555n;
+  n = (n | (n >> 1n)) & 0x3333333333333333n;
+  n = (n | (n >> 2n)) & 0x0f0f0f0f0f0f0f0fn;
+  n = (n | (n >> 4n)) & 0x00ff00ff00ff00ffn;
+  n = (n | (n >> 8n)) & 0x0000ffff0000ffffn;
+  n = (n | (n >> 16n)) & 0x00000000ffffffffn;
+  return n;
+}
+
 /**
  * Interleaves bits of x and y coordinates (Morton code / Z-order curve).
  *
- * @param x - NE coordinate [0, 2^16)
- * @param y - NW coordinate [0, 2^15)
+ * @param x - NE coordinate [0, 2^26)
+ * @param y - NW coordinate [0, 2^26)
  * @returns Interleaved bits: ...y₂x₂y₁x₁y₀x₀
  *
  * ## How it works
@@ -92,38 +118,19 @@ export function nest2fxy(nside: number, ipix: number): FXY {
  *
  * ## Implementation
  *
- * Uses bitwise operations to efficiently interleave up to 16 bits of x
- * with 15 bits of y (covering nside up to 65536).
+ * Uses parallel bit spread. Supports up to 26 bits per coordinate (nside up to
+ * 2^26).
  */
 export function bitCombine(x: number, y: number): number {
-  assert(x < 1 << 16, 'x must fit in 16 bits');
-  assert(y < 1 << 15, 'y must fit in 15 bits');
-
-  return (
-    (x & 1) |
-    (((x & 0x2) | (y & 0x1)) << 1) |
-    (((x & 0x4) | (y & 0x2)) << 2) |
-    (((x & 0x8) | (y & 0x4)) << 3) |
-    (((x & 0x10) | (y & 0x8)) << 4) |
-    (((x & 0x20) | (y & 0x10)) << 5) |
-    (((x & 0x40) | (y & 0x20)) << 6) |
-    (((x & 0x80) | (y & 0x40)) << 7) |
-    (((x & 0x100) | (y & 0x80)) << 8) |
-    (((x & 0x200) | (y & 0x100)) << 9) |
-    (((x & 0x400) | (y & 0x200)) << 10) |
-    (((x & 0x800) | (y & 0x400)) << 11) |
-    (((x & 0x1000) | (y & 0x800)) << 12) |
-    (((x & 0x2000) | (y & 0x1000)) << 13) |
-    (((x & 0x4000) | (y & 0x2000)) << 14) |
-    (((x & 0x8000) | (y & 0x4000)) << 15) |
-    (y & (0x8000 << 16))
-  );
+  assert(x <= MAX_COORD && x >= 0, 'x must fit in 26 bits');
+  assert(y <= MAX_COORD && y >= 0, 'y must fit in 26 bits');
+  return Number(spread1By1(BigInt(x)) | (spread1By1(BigInt(y)) << 1n));
 }
 
 /**
  * De-interleaves bits to recover x and y coordinates (inverse Morton code).
  *
- * @param p - Interleaved value: ...y₂x₂y₁x₁y₀x₀
+ * @param p - Interleaved value: ...y₂x₂y₁x₁y₀x₀ [0, 4^26)
  * @returns { x, y } original coordinates
  *
  * Inverse of bitCombine. Extracts the even-positioned bits into x
@@ -134,47 +141,12 @@ export function bitCombine(x: number, y: number): number {
  * For x: extract bits at positions 0, 2, 4, 6, ... and pack into consecutive bits
  * For y: extract bits at positions 1, 3, 5, 7, ... and pack into consecutive bits
  *
- * Uses masks to isolate specific bits:
- * - 0x1, 0x4, 0x10, 0x40, ... (powers of 4) for x bits
- * - 0x2, 0x8, 0x20, 0x80, ... (2 × powers of 4) for y bits
+ * Uses parallel bit compact (no loops, no division).
  */
 export function bitDecombine(p: number): { x: number; y: number } {
-  assert(p <= 0x7fffffff, 'p must fit in 31 bits');
-
-  const x =
-    ((p & 0x1) >> 0) |
-    ((p & 0x4) >> 1) |
-    ((p & 0x10) >> 2) |
-    ((p & 0x40) >> 3) |
-    ((p & 0x100) >> 4) |
-    ((p & 0x400) >> 5) |
-    ((p & 0x1000) >> 6) |
-    ((p & 0x4000) >> 7) |
-    ((p & 0x10000) >> 8) |
-    ((p & 0x40000) >> 9) |
-    ((p & 0x100000) >> 10) |
-    ((p & 0x400000) >> 11) |
-    ((p & 0x1000000) >> 12) |
-    ((p & 0x4000000) >> 13) |
-    ((p & 0x10000000) >> 14) |
-    ((p & 0x40000000) >> 15);
-
-  const y =
-    ((p & 0x2) >> 1) |
-    ((p & 0x8) >> 2) |
-    ((p & 0x20) >> 3) |
-    ((p & 0x80) >> 4) |
-    ((p & 0x200) >> 5) |
-    ((p & 0x800) >> 6) |
-    ((p & 0x2000) >> 7) |
-    ((p & 0x8000) >> 8) |
-    ((p & 0x20000) >> 9) |
-    ((p & 0x80000) >> 10) |
-    ((p & 0x200000) >> 11) |
-    ((p & 0x800000) >> 12) |
-    ((p & 0x2000000) >> 13) |
-    ((p & 0x8000000) >> 14) |
-    ((p & 0x20000000) >> 15);
-
-  return { x, y };
+  const pn = BigInt(p);
+  return {
+    x: Number(compact1By1(pn)),
+    y: Number(compact1By1(pn >> 1n))
+  };
 }

@@ -38,6 +38,22 @@ describe('bitCombine / bitDecombine', () => {
     // x=1, y=1 -> result should be 3 (bits: y0=1, x0=1 -> 11 = 3)
     expect(bitCombine(1, 1)).toBe(3);
   });
+
+  it('round-trips for 20-bit values', () => {
+    const cases = [
+      [0, 0],
+      [1 << 19, 1 << 19],
+      [(1 << 20) - 1, (1 << 20) - 1],
+      [(1 << 20) - 1, 0],
+      [0, (1 << 20) - 1],
+      [123456, 789012]
+    ];
+    for (const [x, y] of cases) {
+      const { x: x2, y: y2 } = bitDecombine(bitCombine(x, y));
+      expect(x2).toBe(x);
+      expect(y2).toBe(y);
+    }
+  });
 });
 
 describe('fxy2nest / nest2fxy', () => {
