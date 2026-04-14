@@ -63,7 +63,7 @@ See [API](docs/API.md) for more details.
 
 | | |
 |--|--|
-| <img src="./docs/healpix-query.png" width='50%' alt="HEALPix Query"> | <img src="./docs/healpix-nsides.gif" width='auto' alt="HEALPix Nsides"> |
+| <img src="./docs/healpix-query.png" width='50%' alt="HEALPix Query"> | <img src="./docs/healpix-nsides.gif" width='450px' alt="HEALPix Nsides"> |
 | Example of a bounding box query | Grid at different nside values |
 
 ## Resolution Levels
