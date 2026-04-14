@@ -1,3 +1,11 @@
+
+![HEALPix Banner](./docs/healpix-banner.png)
+
+<p align='center'>
+  <a href='https://github.com/developmentseed/healpix-ts'>HEALPix Typescript</a> | <a href='https://github.com/developmentseed/healpix-layers-deck.gl'>HEALPix Deck.gl Layer</a> 
+</p>
+
+
 # HEALPix TypeScript
 
 TypeScript implementation of the **HEALPix** (Hierarchical Equal Area isoLatitude Pixelization) spherical projection system, with functions to convert HEALPix to longitude/latitude, and vice versa.
@@ -52,6 +60,11 @@ console.log('Corners:', corners)
 ```
 
 See [API](docs/API.md) for more details.
+
+| | |
+|--|--|
+| <img src="./docs/healpix-query.png" width='50%' alt="HEALPix Query"> | <img src="./docs/healpix-nsides.gif" width='auto' alt="HEALPix Nsides"> |
+| Example of a bounding box query | Grid at different nside values |
 
 ## Resolution Levels
 
