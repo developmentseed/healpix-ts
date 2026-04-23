@@ -2,7 +2,7 @@
 ![HEALPix Banner](./docs/healpix-banner.png)
 
 <p align='center'>
-  <a href='https://github.com/developmentseed/healpix-ts'>HEALPix Typescript</a> | <a href='https://github.com/developmentseed/healpix-layers-deck.gl'>HEALPix Deck.gl Layer</a> 
+  <a href='https://github.com/developmentseed/healpix-ts'>HEALPix Typescript</a> | <a href='https://github.com/developmentseed/deck.gl-healpix'>HEALPix Deck.gl</a> 
 </p>
 
 
